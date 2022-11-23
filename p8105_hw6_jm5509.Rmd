@@ -1,0 +1,109 @@
+---
+title: "p8105_hw6_jm5509"
+author: "Echo"
+date: "2022-11-23"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+```
+
+## Problem 1
+
+Read the weather data:
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+
+```
+
+## Problem 2
+
+First read the data:
+```{r}
+homicides_df <- read.csv("https://raw.githubusercontent.com/washingtonpost/data-homicides/master/homicide-data.csv")
+```
+
+Then I created a `city_state` variable and a binary variable `resolved` indicating whether the homicide is solved, and omit cities Dallas, TX; Phoenix, AZ; and Kansas City, MO – these don’t report victim race. Also omit Tulsa, AL – this is a data entry mistake. I also limit my analysis those for whom `victim_race` is white or black. Be sure that `victim_age` is numeric. 
+
+```{r}
+homicides_tb <-  homicides_df %>% 
+  mutate(city_state = str_c(city, state, sep = ', '),
+        resolved = as.numeric(disposition == 'Closed by arrest') ) %>% 
+  filter(city_state !=  'Dallas, TX' & city_state != 'Phoenix, AZ' &
+           city_state !=  'Kansas City, MO') %>% 
+  filter(city_state != 'Tulsa, AL') %>% 
+  filter(victim_race == 'White' | victim_race == 'Black') %>% 
+  mutate(victim_age = as.numeric(victim_age),
+         victim_race = fct_relevel(victim_race, 'White')) 
+```
+
+For the city of Baltimore, MD, use the glm function to fit a logistic regression with `resolved vs unresolved` as the outcome and `victim age`, `sex` and `race` as predictors. Save the output of glm as an R object; apply the broom::tidy to this object; and obtain the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
+
+```{r}
+bal_logistic <- homicides_tb %>% 
+  filter(city_state == 'Baltimore, MD') %>% 
+  glm(resolved ~ victim_age + victim_sex + victim_race, data = ., 
+      family = binomial())
+
+bal_logistic %>% 
+  broom::tidy(conf.int = TRUE) %>% 
+  mutate(OR = exp(estimate),
+         conf_low_OR = exp(conf.low),
+         conf_high_OR = exp(conf.high)) %>% 
+  select(term, OR, conf_low_OR, conf_high_OR) %>% 
+  filter(term == 'victim_sexMale') %>% 
+  knitr::kable(digits = 3)
+
+```
+
+Now I run glm for each of the cities in dataset, and extract the adjusted odds ratio (and CI) for solving homicides **comparing male victims to female victims**. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
+```{r}
+all_cities <- homicides_tb %>% 
+  group_by(city_state) %>% 
+  nest() %>% 
+  mutate(models = map(data, ~glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial())),
+         models = map(models, broom::tidy, conf.int = TRUE)) %>% 
+  select(-data) %>% 
+  unnest() %>% 
+  mutate(OR = exp(estimate),
+         conf_low_OR = exp(conf.low),
+         conf_high_OR = exp(conf.high)) %>% 
+  select(city_state, term, OR, conf_low_OR, conf_high_OR) %>% 
+  filter(term == 'victim_sexMale') 
+
+all_cities %>% knitr::kable()
+```
+
+
+```{r}
+all_cities %>% 
+  mutate(city_state = fct_reorder(city_state, OR)) %>% 
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf_low_OR, ymax = conf_high_OR)) +
+  theme(text = element_text(size = 10),
+          axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs( x = 'city', y ='odds Ratio',
+    title = 'Estimated ORs and CIs for Each City\' Unsolved Homicides'
+  )
+```
+
+
