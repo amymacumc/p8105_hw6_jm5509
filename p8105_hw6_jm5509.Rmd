@@ -7,6 +7,7 @@ output: github_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+options(timeout = 6000)
 library(tidyverse)
 
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
@@ -95,14 +96,14 @@ all_cities %>% knitr::kable()
 
 ```{r}
 all_cities %>% 
-  mutate(city_state = fct_reorder(city_state, OR)) %>% 
-  ggplot(aes(x = city_state, y = OR)) +
+  #mutate(city_state = fct_reorder(city_state, OR, .desc = TRUE)) %>% 
+  ggplot(aes(x = fct_reorder(city_state, OR, .desc = TRUE), y = OR)) +
   geom_point() +
   geom_errorbar(aes(ymin = conf_low_OR, ymax = conf_high_OR)) +
   theme(text = element_text(size = 10),
           axis.text.x = element_text(angle = 90, hjust = 1)) +
   labs( x = 'city', y ='odds Ratio',
-    title = 'Estimated ORs and CIs for Each City\' Unsolved Homicides'
+    title = 'Estimated ORs and CIs for Each City\'s Unsolved Homicides'
   )
 ```
 
