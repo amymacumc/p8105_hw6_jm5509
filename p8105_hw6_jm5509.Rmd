@@ -183,7 +183,7 @@ mdl1_full %>% ggplot(aes(x = pred, y = resid)) +
 
 In this plot, the range of residuals tends to decrease as the predicted `bwt` increases.
 
-I would compare your model to two others:
+I would compare my model to two others:
 
 1.using length at birth and gestational age as predictors (main effects only)
 ```{r}
