@@ -9,6 +9,7 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE)
 options(timeout = 6000)
 library(tidyverse)
+library(modelr)
 
 theme_set(theme_minimal() + theme(legend.position = "bottom"))
 options(
@@ -169,8 +170,8 @@ mdl1 %>% broom::glance()
 
 Below is a plot of model residuals against fitted values.
 ```{r}
-mdl1_resid <- modelr::add_residuals(bwt, mdl1)
-mdl1_pred <- modelr::add_predictions(bwt, mdl1)
+mdl1_resid <- add_residuals(bwt, mdl1)
+mdl1_pred <- add_predictions(bwt, mdl1)
 mdl1_full <- bwt %>% 
   mutate(resid = mdl1_resid$resid,
          pred = mdl1_pred$pred)
@@ -200,6 +201,52 @@ mdl3 %>% broom::glance()
 ```
 
 I would make this comparison among these models in terms of the cross-validated prediction error.
+
+```{r}
+cv_df <- crossv_mc(bwt, 100)
+cv_df <- cv_df %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+I now have many training and testing datasets, and I’d like to fit my candidate models above and assess prediction accuracy as I did for the single training / testing split. To do this, I’ll fit models and obtain RMSEs using `mutate` + `map` & `map2`.
+```{r}
+cv_df = 
+  cv_df %>% 
+  mutate(
+    mdl1_fit = map(train, ~lm(bwt ~ blength * bhead, data = .x)),
+    mdl2_fit = map(train, ~lm(bwt ~ blength + gaweeks,data = .x)),
+    mdl3_fit = map(train, ~lm(bwt ~ bhead * blength * babysex , data = .x))
+  ) %>% 
+  mutate(
+    rmse_mdl1 = map2_dbl(mdl1_fit, test, ~rmse(model = .x, data = .y)),
+    rmse_mdl2 = map2_dbl(mdl2_fit, test, ~rmse(model = .x, data = .y)),
+    rmse_mdl3 = map2_dbl(mdl3_fit, test, ~rmse(model = .x, data = .y))
+  )
+```
+
+I’m mostly focused on RMSE as a way to compare these models, and the plot below shows the distribution of RMSE values for each candidate model.
+
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin() +
+  labs(
+    title = 'RMSE for Cross Validation',
+       x = 'models', y = 'RMSE'
+  )
+```
+
+From this RSME plot, it seems that the model1:`lm(bwt ~ blength * bhead)` and the model3:`lm(bwt ~ bhead * blength * babysex)` have better fit. The model 1 seems slightly better. Hence, it's better to contain `blength` and `bhead` in the model to predict babies' birthweight.
+
+
 
 
 
