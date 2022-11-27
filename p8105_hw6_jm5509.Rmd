@@ -108,9 +108,98 @@ all_cities %>%
 
 ## Problem 3
 
+Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
+
 ```{r}
-bwt <- read_csv('birthweight.csv')
+bwt <- read_csv('birthweight.csv') %>% 
+  mutate(
+    babysex = as.factor(babysex),
+         frace = as.factor(frace),
+         mrace = as.factor(mrace),
+         malform = as.factor(malform)
+         )
+bwt %>% is.na() %>% any()
 ```
+There is no missing data in this `bwt` data frame.
+
+Next, I would propose a regression model for `bwt`. I would first consider this model based on a hypothesized structure for the factors that underly `bwt`, and select the predictors of interest: `blength`,`babysex`,`bhead`, 
+`delwt`, `frace`,`gaweeks`, `malform`, `menarche`,`momage`, `mrace`, `ppbmi`,`smoken`,`wtgain`.
+
+First, I would make the following models and review these predictors' p-value.
+```{r}
+bwt %>%  lm(bwt ~ blength, data = .) %>% 
+  broom::tidy()
+
+bwt %>%  lm(bwt ~ babysex, data = .) %>% 
+  broom::tidy()
+
+bwt %>%  lm(bwt ~ bhead, data = .) %>% 
+  broom::tidy()
+
+bwt %>%  lm(bwt ~ blength * bhead * babysex, data = .) %>% 
+  broom::tidy()
+```
+
+From the results above, we can observe that all the predictors have a p-value<0.05.
+So Next, I would make the following models and review these adjusted R squared.
+```{r}
+bwt %>%  lm(bwt ~ blength, data = .) %>% 
+  broom::glance()
+
+bwt %>%  lm(bwt ~ babysex, data = .) %>% 
+  broom::glance()
+
+bwt %>%  lm(bwt ~ bhead, data = .) %>% 
+  broom::glance()
+
+bwt %>%  lm(bwt ~ blength * bhead * babysex, data = .) %>% 
+  broom::glance()
+
+```
+
+
+In this case, the adjusted R squared of model using `babysex` as the only predictor is relatively low. Due to the rule of parsimony, I would exclude this predictor from my model.
+
+In the end, my model would be:
+```{r}
+mdl1 <- bwt %>%  lm(bwt ~ blength * bhead, data = .) 
+mdl1 %>% broom::tidy()
+mdl1 %>% broom::glance()
+```
+
+Below is a plot of model residuals against fitted values.
+```{r}
+mdl1_resid <- modelr::add_residuals(bwt, mdl1)
+mdl1_pred <- modelr::add_predictions(bwt, mdl1)
+mdl1_full <- bwt %>% 
+  mutate(resid = mdl1_resid$resid,
+         pred = mdl1_pred$pred)
+mdl1_full %>% ggplot(aes(x = pred, y = resid)) +
+  geom_point() + geom_smooth() +
+  labs(title = 'Residuals vs Fitted',
+       x = 'fitted', y = 'residuals' )
+```
+
+In this plot, the range of residuals tends to decrease as the predicted `bwt` increases.
+
+I would compare your model to two others:
+
+1.using length at birth and gestational age as predictors (main effects only)
+```{r}
+mdl2 <- bwt %>% lm(bwt ~ blength + gaweeks, data = .)
+mdl2 %>% broom::tidy()
+mdl2 %>% broom::glance()
+```
+
+2.using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+```{r}
+mdl3 <- bwt %>% lm(bwt ~ bhead * blength * babysex , data = .)
+mdl3 %>% broom::tidy()
+mdl3 %>% broom::glance()
+
+```
+
+I would make this comparison among these models in terms of the cross-validated prediction error.
 
 
 
